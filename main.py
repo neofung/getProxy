@@ -1,6 +1,8 @@
 # -*- coding=utf-8 -*-
 import threading
 
+ADDRESS = 'localhost'
+
 UPDATE_INTERVAL = 180
 
 HTTP_PORT = 8111
@@ -157,7 +159,7 @@ class ServerThread(threading.Thread):
         self.__port = port
 
     def run(self):
-        http_server = HTTPServer(('localhost', int(self.__port)), TestHTTPHandler)
+        http_server = HTTPServer((ADDRESS, int(self.__port)), TestHTTPHandler)
         http_server.serve_forever()
 
 
