@@ -1,6 +1,10 @@
 # -*- coding=utf-8 -*-
 import threading
 
+UPDATE_INTERVAL = 180
+
+HTTP_PORT = 8111
+
 __author__ = 'Rocky'
 import urllib, urllib.request
 from lxml import etree
@@ -119,7 +123,7 @@ class getProxy(threading.Thread):
     def run(self):
         self.check_db_pool()
         self.loop(5)
-        time.sleep(180)
+        time.sleep(UPDATE_INTERVAL)
 
 
 class TestHTTPHandler(BaseHTTPRequestHandler):
@@ -159,7 +163,7 @@ class ServerThread(threading.Thread):
 
 
 if __name__ == "__main__":
-    server_thread = ServerThread(8111)
+    server_thread = ServerThread(HTTP_PORT)
     proxy_thread = getProxy()
 
     server_thread.start()
