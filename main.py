@@ -1,12 +1,17 @@
 # -*- coding=utf-8 -*-
+import threading
+
 __author__ = 'Rocky'
-import urllib2, time, datetime
+import urllib, urllib.request
 from lxml import etree
 import sqlite3,time
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
-class getProxy():
+
+class getProxy(threading.Thread):
 
     def __init__(self):
+        threading.Thread.__init__(self)
         self.user_agent = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)"
         self.header = {"User-Agent": self.user_agent}
         self.dbname="proxy.db"
@@ -15,8 +20,12 @@ class getProxy():
     def getContent(self, num):
         nn_url = "http://www.xicidaili.com/nn/" + str(num)
         #国内高匿
-        req = urllib2.Request(nn_url, headers=self.header)
-        resp = urllib2.urlopen(req, timeout=10)
+        req = urllib.request.Request(nn_url, headers=self.header)
+        try:
+            resp = urllib.request.urlopen(req, timeout=10)
+        except urllib.error.URLError as ex:
+            print(ex)
+            return
         content = resp.read()
         et = etree.HTML(content)
         result_even = et.xpath('//tr[@class=""]')
@@ -26,13 +35,13 @@ class getProxy():
         #使用上面的方法可以不管网页怎么改，都可以抓到ip 和port
         for i in result_even:
             t1 = i.xpath("./td/text()")[:2]
-            print "IP:%s\tPort:%s" % (t1[0], t1[1])
+            print("IP:%s\tPort:%s" % (t1[0], t1[1]))
             if self.isAlive(t1[0], t1[1]):
 
                 self.insert_db(self.now,t1[0],t1[1])
         for i in result_odd:
             t2 = i.xpath("./td/text()")[:2]
-            print "IP:%s\tPort:%s" % (t2[0], t2[1])
+            print("IP:%s\tPort:%s" % (t2[0], t2[1]))
             if self.isAlive(t2[0], t2[1]):
                 self.insert_db(self.now,t2[0],t2[1])
 
@@ -42,7 +51,7 @@ class getProxy():
         try:
             conn=sqlite3.connect(dbname)
         except:
-            print "Error to open database%" %self.dbname
+            print("Error to open database%" % self.dbname)
         create_tb='''
         CREATE TABLE IF NOT EXISTS PROXY
         (DATE TEXT,
@@ -65,27 +74,27 @@ class getProxy():
     #查看爬到的代理IP是否还能用
     def isAlive(self,ip,port):
         proxy={'http':ip+':'+port}
-        print proxy
+        print(proxy)
 
         #使用这个方式是全局方法。
-        proxy_support=urllib2.ProxyHandler(proxy)
-        opener=urllib2.build_opener(proxy_support)
-        urllib2.install_opener(opener)
+        proxy_support = urllib.request.ProxyHandler(proxy)
+        opener = urllib.request.build_opener(proxy_support)
+        urllib.request.install_opener(opener)
         #使用代理访问腾讯官网，进行验证代理是否有效
         test_url="http://www.qq.com"
-        req=urllib2.Request(test_url,headers=self.header)
+        req = urllib.request.Request(test_url, headers=self.header)
         try:
             #timeout 设置为10，如果你不能忍受你的代理延时超过10，就修改timeout的数字
-            resp=urllib2.urlopen(req,timeout=10)
+            resp = urllib.request.urlopen(req, timeout=10)
 
             if resp.code==200:
-                print "work"
+                print("work")
                 return True
             else:
-                print "not work"
+                print("not work")
                 return False
         except :
-            print "Not work"
+            print("Not work")
             return False
 
     #查看数据库里面的数据时候还有效，没有的话将其纪录删除
@@ -101,16 +110,60 @@ class getProxy():
                 delete_cmd='''
                 delete from PROXY where IP='%s'
                 ''' %row[0]
-                print "delete IP %s in db" %row[0]
+                print("delete IP %s in db" % row[0])
                 conn.execute(delete_cmd)
                 conn.commit()
 
         conn.close()
 
+    def run(self):
+        self.check_db_pool()
+        self.loop(5)
+        time.sleep(180)
+
+
+class TestHTTPHandler(BaseHTTPRequestHandler):
+    __dbname = "proxy.db"
+
+    def get_list(self):
+        conn = sqlite3.connect(self.__dbname)
+        query_cmd = '''
+                select IP,PORT from PROXY;
+                '''
+        cursor = conn.execute(query_cmd)
+        for row in cursor:
+            yield row
+        conn.close()
+
+    def do_GET(self):
+        proxy = []
+        for i in self.get_list():
+            pass
+            proxy.append(i)
+        buffer = str({'proxy': proxy})
+        self.protocol_version = 'HTTP/1.1'
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(bytes(buffer, encoding='utf-8'))
+
+
+class ServerThread(threading.Thread):
+    def __init__(self, port):
+        threading.Thread.__init__(self)
+        self.__port = port
+
+    def run(self):
+        http_server = HTTPServer(('localhost', int(self.__port)), TestHTTPHandler)
+        http_server.serve_forever()
+
+
 
 if __name__ == "__main__":
-    now = datetime.datetime.now()
-    print "Start at %s" % now
-    obj=getProxy()
-    obj.loop(5)
-    obj.check_db_pool()
+    server_thread = ServerThread(8111)
+    proxy_thread = getProxy()
+
+    server_thread.start()
+    proxy_thread.start()
+
+    server_thread.join()
+    proxy_thread.join()
