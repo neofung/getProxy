@@ -1,4 +1,5 @@
 # -*- coding=utf-8 -*-
+import datetime
 import threading
 
 ADDRESS = 'localhost'
@@ -123,9 +124,10 @@ class getProxy(threading.Thread):
         conn.close()
 
     def run(self):
-        self.check_db_pool()
-        self.loop(5)
-        time.sleep(UPDATE_INTERVAL)
+        while (True):
+            self.check_db_pool()
+            self.loop(5)
+            time.sleep(UPDATE_INTERVAL)
 
 
 class TestHTTPHandler(BaseHTTPRequestHandler):
@@ -146,7 +148,7 @@ class TestHTTPHandler(BaseHTTPRequestHandler):
         for i in self.get_list():
             pass
             proxy.append(i)
-        buffer = str({'proxy': proxy})
+        buffer = str({'proxy': proxy, 'updated_time': datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')})
         self.protocol_version = 'HTTP/1.1'
         self.send_response(200)
         self.end_headers()
